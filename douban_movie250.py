@@ -12,8 +12,9 @@ header = {'User-Agent':
 
 urls = ['https://movie.douban.com/top250?start={}&filter='.format(str(i)) for i in range(0, 250, 25)]
 
+movies = []
 
-def parse_one_movie(infos):
+def parse_one_movie(cursor, infos):
     url = infos.find("a", href=re.compile(r"https://movie\.douban\.com/subject/[0-9]+/"))['href']
     titles = infos.findAll("span", class_="title")
     title = ""
@@ -31,19 +32,34 @@ def parse_one_movie(infos):
     year = other_infos[0].strip()
     region = other_infos[1].strip()
     movie_type = other_infos[2].strip()
-    introduce = infos.find("span", class_="inq").string
+    introduce = infos.find("span", class_="inq")
+    # 有电影的简介是空的，这里容错下
+    if introduce != None:
+        introduce = introduce.string
+    else:
+        introduce = ""
+
+    movie = [title,\
+             other_title,\
+             url,\
+             rating_num,\
+             director_actor,\
+             year,\
+             region,\
+             movie_type,\
+             introduce]
+    movies.append(tuple(movie))
 
 
-def get_url_info(url):
+def get_url_info(cursor, url):
     url_info = requests.get(url, header)
     content = url_info.content.decode('utf-8')
     soup = BeautifulSoup(content, "html.parser")
     items = soup.findAll("div", class_="item")
 
     for item in items:
-        parse_one_movie(item)
-    #print(items)
-    #time.sleep(1)
+        parse_one_movie(cursor, item)
+    time.sleep(1) # 一次网页请求间隔1m，防止被禁
 
 sql_create = "CREATE TABLE IF NOT EXISTS douban_top_movie " \
       "( ID INT NOT NULL AUTO_INCREMENT, " \
@@ -53,37 +69,42 @@ sql_create = "CREATE TABLE IF NOT EXISTS douban_top_movie " \
       " url VARCHAR(512), " \
       " rating_num VARCHAR(64), " \
       " director_actor VARCHAR(1024), " \
-      " year INT(4), " \
+      " year VARCHAR(64), " \
       " region VARCHAR(128), " \
       " movie_type VARCHAR(128), " \
       " introduce VARCHAR(1024)" \
       ");"
 
-# for url in urls:
-#     get_url_info(url)
-
+# 连接本地mysql数据库，mysql.server需要保证已启动
 connection = pymysql.connect(host='localhost',
                              user='root',
                              password='',
                              db='douban_infos_db',
                              charset='utf8mb4')
+
 try:
     with connection.cursor() as cursor:
-        sql_insert = "insert into `douban_top_movie` (" \
-        "`title`, " \
-        "`other_title`," \
-        "`url`," \
-        "`rating_num`," \
-        "`director_actor`," \
-        "`year`," \
-        "`region`," \
-        "`movie_type`," \
-        "`introduce`" \
-        ") values(%s, %s, %s, %s, %s, %s, %s, %s, %s)"
         cursor.execute(sql_create)
 
+        #从list中获取一个网页，一次解析25个电影
+        for url in urls:
+            print(url)
+            get_url_info(cursor, url)
+
+        sqlcmd = '''insert into douban_top_movie (
+                 title,
+                 other_title,
+                 url,
+                 rating_num,
+                 director_actor,
+                 year,
+                 region,
+                 movie_type,
+                 introduce
+                 ) values(%s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+
+        cursor.executemany(sqlcmd, movies)
         connection.commit()
 finally:
     connection.close()
 
-#get_url_info("https://movie.douban.com/top250?start=0&filter=")
