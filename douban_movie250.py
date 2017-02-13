@@ -29,9 +29,14 @@ def parse_one_movie(cursor, infos):
     movie_infos = movie_info.split('\n')
     director_actor = movie_infos[0].strip()
     other_infos = movie_infos[1].strip().split('/')
-    year = other_infos[0].strip()
-    region = other_infos[1].strip()
-    movie_type = other_infos[2].strip()
+    if len(other_infos) == 3:
+        year = other_infos[0].strip()
+        region = other_infos[1].strip()
+        movie_type = other_infos[2].strip()
+    else: # for 82 大闹天宫
+        year = other_infos[0].strip() +"," + other_infos[1].strip() + "," + other_infos[2].strip() + "," + other_infos[3].strip()
+        region = other_infos[4].strip()
+        movie_type = other_infos[5].strip()
     introduce = infos.find("span", class_="inq")
     # 有电影的简介是空的，这里容错下
     if introduce != None:
